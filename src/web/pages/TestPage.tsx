@@ -22,24 +22,27 @@ export const appLink = (code?: string) => {
 /** Окно «Поделиться» huEVO: текст + (необязательно) картинка. Публикует сам игрок, куда выберет. */
 export function useShare(id: number, code?: string, title?: string) {
   const { toast } = useApp();
-  return async (picture?: string | null) => {
+  return async (picture?: Blob | null) => {
     const s = sdk();
     if (!s) return toast('Поделиться можно только внутри huEVO');
     const link = appLink(code);
     const text = [title && `Тест «${title}»`, link && `Пройти тест: ${link}`].filter(Boolean).join(String.fromCharCode(10));
     try {
-      const attachment = picture ? await (await fetch(picture)).blob() : undefined;
-      const r = await s.shareContent({ text, attachment });
+      if (typeof s.shareContent !== 'function') { await s.share(); return; }
+      const r = await s.shareContent({ text, attachment: picture ?? undefined });
       if (r.shared) {
         api(`/tests/${id}/shared`, { method: 'POST', body: {} }).catch(() => {});
         toast('Опубликовано!');
       }
     } catch (e: any) {
-      if (e?.code === 'unsupported') {
-        // окно недоступно — делимся хотя бы ссылкой на игру
-        s.share().catch(() => {});
-      } else if (e?.code === 'rate_limited') toast('Слишком часто, подожди минуту');
-      else if (e?.code !== 'timeout') toast('Не получилось поделиться');
+      console.warn('shareContent', e?.code, e);
+      if (e?.code === 'unsupported') s.share().catch(() => {});
+      else if (e?.code === 'rate_limited') toast('Слишком часто или окно уже открыто, подожди немного');
+      else if (e?.code === 'bad_request' && picture) {
+        // картинку не приняли: отправляем хотя бы текст со ссылкой
+        toast('Картинку не приняли, отправляем текст со ссылкой');
+        s.shareContent({ text }).catch(() => {});
+      } else if (e?.code !== 'timeout') toast(`Не получилось поделиться${e?.code ? ` (${e.code})` : ''}`);
     }
   };
 }

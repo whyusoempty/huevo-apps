@@ -29,13 +29,32 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 }
 
 let avatarCache: Promise<HTMLImageElement | null> | null = null;
-/** Аватар берём через наш сервер (тот же origin), иначе canvas нельзя будет выгрузить в картинку. */
+/** Аватар берём через наш сервер (тот же origin), иначе canvas нельзя будет выгрузить в картинку.
+ *  Неудачу не кэшируем и ждём не дольше 4 с, чтобы коллаж не зависал. */
 export function loadAvatar(): Promise<HTMLImageElement | null> {
-  avatarCache ??= fetch('/api/avatar', { headers: authHeader() })
-    .then((r) => (r.ok ? r.blob() : null))
-    .then((b) => (b ? loadImage(URL.createObjectURL(b)) : null))
-    .catch(() => null);
+  if (!avatarCache) {
+    const load = fetch('/api/avatar', { headers: authHeader() })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => (b ? loadImage(URL.createObjectURL(b)) : null))
+      .catch(() => null);
+    const timeout = new Promise<null>((res) => setTimeout(() => res(null), 4000));
+    avatarCache = Promise.race([load, timeout]).then((img) => {
+      if (!img) avatarCache = null;
+      return img;
+    });
+  }
   return avatarCache;
+}
+
+/** Скруглённый прямоугольник без ctx.roundRect (его нет в старых браузерах). */
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
@@ -80,8 +99,7 @@ function drawLabel(ctx: CanvasRenderingContext2D, text: string, cx: number, bott
   const h = lines.length * lh + 14;
   const x = cx - w / 2, y = bottom - h;
   ctx.fillStyle = 'rgba(255,255,255,0.94)';
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 8);
+  roundedRect(ctx, x, y, w, h, 8);
   ctx.fill();
   ctx.fillStyle = '#1b1b1b';
   lines.forEach((l, i) => ctx.fillText(l, cx, y + 7 + lh * (i + 0.5)));
@@ -104,9 +122,9 @@ function drawWatermark(ctx: CanvasRenderingContext2D, text: string, sub: string,
   ctx.fillText(sub, cx, cy + size * 0.62);
 }
 
-export async function renderCollage(inp: CollageInput): Promise<string> {
+async function draw(inp: CollageInput, useAvatar: boolean): Promise<Blob> {
   const [avatar, cover, res, tz] = await Promise.all([
-    loadAvatar(),
+    useAvatar ? loadAvatar() : Promise.resolve(null),
     inp.coverImage ? loadImage(imgUrl(inp.coverImage)) : Promise.resolve(null),
     inp.result.image ? loadImage(imgUrl(inp.result.image)) : Promise.resolve(null),
     inp.teaserImage ? loadImage(imgUrl(inp.teaserImage)) : Promise.resolve(null),
@@ -165,5 +183,19 @@ export async function renderCollage(inp: CollageInput): Promise<string> {
     drawLabel(ctx, inp.result.title, W / 2, iy + ih - 26, W - 120, 30);
     drawWatermark(ctx, 'Тесты', inp.watermark, W - 110, iy + ih - 62, 30);
   }
-  return canvas.toDataURL('image/jpeg', 0.9);
+  return new Promise<Blob>((resolve, reject) => {
+    try {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob вернул null'))), 'image/jpeg', 0.9);
+    } catch (e) { reject(e); }
+  });
+}
+
+/** Собирает коллаж; если с аватаром не вышло (например, canvas «испачкан»), пробует без него. */
+export async function renderCollage(inp: CollageInput): Promise<Blob> {
+  try {
+    return await draw(inp, true);
+  } catch (e) {
+    console.warn('collage: с аватаром не вышло, пробую без него', e);
+    return draw(inp, false);
+  }
 }

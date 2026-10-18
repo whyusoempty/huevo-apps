@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { api } from '../api';
 import { renderCollage, type Layout } from '../collage';
 import { go } from '../router';
@@ -30,6 +30,8 @@ export function Result({ id }: { id: number }) {
   const [review, setReview] = useState(false);
   const [layout, setLayout] = useState<Layout>('grid');
   const [picture, setPicture] = useState<string | null>(null);
+  const blobRef = useRef<Promise<Blob | null> | null>(null);
+  const [failedPic, setFailedPic] = useState(false);
   const share = useShare(id, test?.code, test?.title);
 
   useEffect(() => {
@@ -47,7 +49,8 @@ export function Result({ id }: { id: number }) {
     if (!r || !test) return;
     let alive = true;
     setPicture(null);
-    renderCollage({
+    setFailedPic(false);
+    const job = renderCollage({
       layout,
       userName: me.name.split(' ')[0] || me.name,
       testTitle: test.title,
@@ -58,9 +61,31 @@ export function Result({ id }: { id: number }) {
       teaserImage: r.teaser_image,
       result: r.result,
       watermark: `код ${test.code} · huEVO`,
-    }).then((url) => alive && setPicture(url)).catch(() => alive && toast('Не получилось собрать картинку'));
+    }).then((blob) => {
+      if (alive) setPicture(URL.createObjectURL(blob));
+      return blob;
+    }).catch((e) => {
+      console.warn('collage', e);
+      if (alive) setFailedPic(true);
+      return null;
+    });
+    blobRef.current = job;
     return () => { alive = false; };
   }, [r, test, layout]);
+
+  useEffect(() => () => { if (picture) URL.revokeObjectURL(picture); }, [picture]);
+
+  /** Кнопка не блокируется: если картинка ещё собирается, ждём её, если не вышло, шлём текст со ссылкой. */
+  const sharing = useRef(false);
+  const onShare = async () => {
+    if (sharing.current) return;          // окно уже открыто: второй вызов дал бы rate_limited
+    sharing.current = true;
+    try {
+      const blob = blobRef.current ? await blobRef.current : null;
+      if (!blob) toast('Картинку собрать не удалось, отправляем текст со ссылкой');
+      await share(blob);
+    } finally { sharing.current = false; }
+  };
 
   if (!r) return <><Bar title="Результат" onBack={() => go(`t/${id}`)} /><Spinner /></>;
 
@@ -80,7 +105,7 @@ export function Result({ id }: { id: number }) {
           <a href="#/" class={layout === 'big' ? 'on' : ''} onClick={(e) => { e.preventDefault(); setLayout('big'); }}>Крупно</a>
         </div>
         <div class="collage-box">
-          {picture ? <img class="collage" src={picture} alt={r.result.title} /> : <Spinner />}
+          {picture ? <img class="collage" src={picture} alt={r.result.title} /> : failedPic ? <p class="muted small">Картинку собрать не получилось, но поделиться текстом со ссылкой можно.</p> : <Spinner />}
         </div>
         <p class="muted small center">Кнопка выше откроет окно huEVO: выбери свою страницу, сообщество или друга. Картинку можно и просто сохранить. Друзья найдут тест по коду на ней: «По коду» на главной.</p>
 
@@ -89,7 +114,7 @@ export function Result({ id }: { id: number }) {
         <p class="muted small">{r.kind === 'personality' ? 'Так же получилось у' : 'С таким результатом'} {r.percentSame}% игроков.</p>
 
         <div class="actions">
-          <button class="bbtn big" disabled={!picture} onClick={() => share(picture)}>Отправить себе на стену</button>
+          <button class="bbtn big" onClick={onShare}>{picture || failedPic ? 'Отправить себе на стену' : 'Собираем картинку…'}</button>
           <button class="gbtn" onClick={() => go(`play/${id}`)}>Пройти ещё раз</button>
           {test && <button class={test.liked ? 'gbtn on' : 'gbtn'} onClick={like}>{test.liked ? '♥ Понравилось' : '♡ Мне нравится'}</button>}
           {canDonate && <button class="gold-btn" onClick={() => setDonate(true)}>Поддержать автора монетками</button>}
