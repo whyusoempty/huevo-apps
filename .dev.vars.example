@@ -1,0 +1,5 @@
+# copy to .dev.vars for local `wrangler dev`
+HUEVO_CLIENT_SECRET=your-client-secret
+JWT_SECRET=any-long-random-string
+DEV_LOGIN=1
+ADMIN_IDS=1
