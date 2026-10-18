@@ -22,27 +22,38 @@ export const appLink = (code?: string) => {
 /** Окно «Поделиться» huEVO: текст + (необязательно) картинка. Публикует сам игрок, куда выберет. */
 export function useShare(id: number, code?: string, title?: string) {
   const { toast } = useApp();
-  return async (picture?: Blob | null) => {
+  /** Возвращает короткий статус для показа игроку (по нему видно, где оборвалось). */
+  return async (picture?: Blob | null): Promise<string> => {
     const s = sdk();
-    if (!s) return toast('Поделиться можно только внутри huEVO');
+    if (!s) { toast('Поделиться можно только внутри huEVO'); return 'SDK huEVO не загружен'; }
     const link = appLink(code);
     const text = [title && `Тест «${title}»`, link && `Пройти тест: ${link}`].filter(Boolean).join(String.fromCharCode(10));
+    console.info('[share] старт', { picture: picture ? `${picture.type} ${picture.size} Б` : 'нет', link });
+    let slow: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (typeof s.shareContent !== 'function') { await s.share(); return; }
+      if (typeof s.shareContent !== 'function') { await s.share(); return 'в этой версии SDK нет shareContent, отправлена ссылка на игру'; }
+      slow = setTimeout(() => toast('Окно huEVO пока не ответило, подожди…'), 5000);
       const r = await s.shareContent({ text, attachment: picture ?? undefined });
+      console.info('[share] ответ', r);
       if (r.shared) {
         api(`/tests/${id}/shared`, { method: 'POST', body: {} }).catch(() => {});
         toast('Опубликовано!');
+        return 'опубликовано';
       }
+      return 'окно закрыто без публикации';
     } catch (e: any) {
-      console.warn('shareContent', e?.code, e);
-      if (e?.code === 'unsupported') s.share().catch(() => {});
-      else if (e?.code === 'rate_limited') toast('Слишком часто или окно уже открыто, подожди немного');
-      else if (e?.code === 'bad_request' && picture) {
-        // картинку не приняли: отправляем хотя бы текст со ссылкой
+      console.warn('[share] ошибка', e?.code, e);
+      if (e?.code === 'unsupported') { s.share().catch(() => {}); return 'окно «Поделиться» недоступно, отправлена ссылка на игру'; }
+      if (e?.code === 'rate_limited') { toast('Окно уже открыто или слишком часто, подожди немного'); return 'rate_limited'; }
+      if (e?.code === 'bad_request' && picture) {
         toast('Картинку не приняли, отправляем текст со ссылкой');
         s.shareContent({ text }).catch(() => {});
-      } else if (e?.code !== 'timeout') toast(`Не получилось поделиться${e?.code ? ` (${e.code})` : ''}`);
+        return 'bad_request: картинку не приняли, отправлен текст';
+      }
+      if (e?.code !== 'timeout') toast(`Не получилось поделиться${e?.code ? ` (${e.code})` : ''}`);
+      return `ошибка: ${e?.code ?? e?.message ?? e}`;
+    } finally {
+      if (slow) clearTimeout(slow);
     }
   };
 }

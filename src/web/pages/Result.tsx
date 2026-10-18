@@ -77,14 +77,15 @@ export function Result({ id }: { id: number }) {
 
   /** Кнопка не блокируется: если картинка ещё собирается, ждём её, если не вышло, шлём текст со ссылкой. */
   const sharing = useRef(false);
+  const [shareNote, setShareNote] = useState('');
   const onShare = async () => {
-    if (sharing.current) return;          // окно уже открыто: второй вызов дал бы rate_limited
+    if (sharing.current) return;          // окно уже открывается: второй вызов дал бы rate_limited
     sharing.current = true;
-    try {
-      const blob = blobRef.current ? await blobRef.current : null;
-      if (!blob) toast('Картинку собрать не удалось, отправляем текст со ссылкой');
-      await share(blob);
-    } finally { sharing.current = false; }
+    setTimeout(() => { sharing.current = false; }, 5000);
+    setShareNote('Открываю окно huEVO…');
+    const blob = blobRef.current ? await blobRef.current : null;
+    if (!blob) toast('Картинку собрать не удалось, отправляем текст со ссылкой');
+    setShareNote(await share(blob));
   };
 
   if (!r) return <><Bar title="Результат" onBack={() => go(`t/${id}`)} /><Spinner /></>;
@@ -120,6 +121,7 @@ export function Result({ id }: { id: number }) {
           {canDonate && <button class="gold-btn" onClick={() => setDonate(true)}>Поддержать автора монетками</button>}
           <button class="gbtn" onClick={() => go(`t/${id}`)}>Комментарии</button>
         </div>
+        {shareNote && <p class="muted small center">{shareNote}</p>}
 
         {r.review && (
           <>
