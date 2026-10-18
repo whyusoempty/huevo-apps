@@ -1,8 +1,10 @@
 /** Обёртка над huEVO Apps SDK. Скрипт обязательно с домена huEVO (иначе SDK принимает сообщения от любого родителя). */
 const SDK_URL = 'https://huevo.su/static/js/huevo-apps-v1.js';
+/** Домены huEVO, на которых может быть открыто приложение. Без этого SDK отвечает только huevo.su и на втором домене окна молча не работают. */
+export const HUEVO_ORIGINS = ['huevo.su', 'huevo.departament.site'];
 
 export interface HuevoSdk {
-  init(opts?: unknown): Promise<{ mode: 'live' | 'test'; user: { id: number } }>;
+  init(opts?: { debug?: boolean; origins?: string[] }): Promise<{ mode: 'live' | 'test'; user: { id: number } }>;
   confirmPayment(intentId: string): Promise<{ intent_id: string; status: string; test: boolean; error?: string }>;
   share(): Promise<{ shared: boolean }>;
   shareContent(o: { text?: string; attachment?: Blob }): Promise<{ shared: boolean }>;
@@ -23,6 +25,7 @@ export function loadSdk(): Promise<HuevoSdk | null> {
     const s = document.createElement('script');
     const timer = setTimeout(() => resolve(window.huevo ?? null), 5000);
     s.src = SDK_URL;
+    s.setAttribute('data-origins', HUEVO_ORIGINS.slice(1).join(' '));
     s.onload = () => { clearTimeout(timer); resolve(window.huevo ?? null); };
     s.onerror = () => { clearTimeout(timer); resolve(null); };
     document.head.appendChild(s);

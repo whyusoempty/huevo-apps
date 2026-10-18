@@ -31,7 +31,7 @@
 
 | Метод | Результат | Заметки |
 |---|---|---|
-| `init({debug?, origins?})` | `{protocol, app_id, mode, user{id,username,display_name,avatar}, start, launch}` | **не верифицировано**; повторный вызов даёт тот же промис; `origins` нужен при сборке SDK в бандл |
+| `init({debug?, origins?})` (`origins`: домены huEVO, у платформы их два: `huevo.su`, `huevo.departament.site`; без них SDK отвечает только домену скрипта; то же задаёт `data-origins` на теге script) | `{protocol, app_id, mode, user{id,username,display_name,avatar}, start, launch}` | **не верифицировано**; повторный вызов даёт тот же промис; `origins` нужен при сборке SDK в бандл |
 | `confirmPayment(intentId)` | `{intent_id, status, test, error?}` | окно оплаты; таймаут 360 с; результат **не доверенный** |
 | `share()` | `{shared}` | без аргументов, шарит только `https://huevo.su/apps/launch/{app_id}`; Web Share или копирование ссылки |
 | `shareContent({text, attachment})` | `{shared}` | окно «Поделиться» huEVO: игрок выбирает свою стену / сообщество / личку и пишет комментарий. `text` ≤4000 (без HTML), `attachment` **только `Blob`/`File`** jpeg/png/webp/gif ≤10 МБ; нужен хотя бы один. Ссылка на приложение сама не добавляется, пиши её в `text`. Таймаут 600 с. Получает `pause`/`resume` |

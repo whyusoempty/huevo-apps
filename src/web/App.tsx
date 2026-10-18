@@ -10,13 +10,13 @@ import { Result } from './pages/Result';
 import { Top } from './pages/Top';
 import { TestPage } from './pages/TestPage';
 import { go, useRoute } from './router';
-import { launchParams, loadSdk } from './sdk';
+import { HUEVO_ORIGINS, launchParams, loadSdk } from './sdk';
 import { THEMES, getTheme, setTheme } from './theme';
 import { AppCtx, Empty, Spinner, TopTabs, type Session } from './ui';
 
 async function login(): Promise<Session> {
   const sdk = await loadSdk();
-  if (sdk) await sdk.init().catch(() => {});
+  if (sdk) await sdk.init({ origins: HUEVO_ORIGINS }).catch((e) => console.warn('[huevo] init', e));
   const params = launchParams();
   const body = params.hu_hash ? { params } : { dev: { id: Number(new URLSearchParams(location.search).get('dev')) || 1 } };
   const r = await api('/login', { body });

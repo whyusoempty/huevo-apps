@@ -15,6 +15,8 @@
 
 ## Фрейм
 
+- **У huEVO два домена: `huevo.su` и `huevo.departament.site`.** SDK по умолчанию общается только с origin, откуда загружен скрипт (`huevo.su`), поэтому на втором домене `share`, `shareContent`, `confirmPayment`, `openLink` молча не отвечают, а вход работает (подпись берётся из URL). Лечение: `data-origins="huevo.departament.site"` на теге script и/или `huevo.init({origins:['huevo.su','huevo.departament.site']})` до остальных вызовов. Тестируй приложение на обоих доменах.
+
 - Canvas, куда нарисован чужой cross-origin ресурс, нельзя выгрузить (`toBlob` бросает ошибку). Проксируй аватар через свой origin.
 - `<input type="file">` во фрейме работает (sandbox allow-forms), но `download` и буфер обмена нет, поэтому «сохрани картинку» = долгий тап/ПКМ по `<img>` или `shareContent`.
 - Хэш-роутинг, не history API.
